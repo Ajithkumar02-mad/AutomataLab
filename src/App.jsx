@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import Canvas from "./components/Canvas";
+import TransitionModal from "./components/TransitionModal";
 
 import {
   createInitialAutomaton,
@@ -133,8 +134,14 @@ function App() {
      ------------------------------------------------------- */
 
   const [transitionStart, setTransitionStart] =
-    useState(null);
+  useState(null);
 
+const [transitionModal, setTransitionModal] =
+  useState({
+    open: false,
+    from: null,
+    to: null,
+  });
 
   /* -------------------------------------------------------
      STATUS
@@ -562,6 +569,7 @@ function App() {
       "transition"
     ) {
 
+      // First click = source state
       if (
         transitionStart ===
         null
@@ -578,142 +586,203 @@ function App() {
         return;
       }
 
-
+      // Second click = destination state
       const from =
         transitionStart;
 
       const to =
         stateId;
 
-
-      const symbol =
-        window.prompt(
-          "Enter transition symbol:",
-          "0"
+      const fromState =
+        automaton.states.find(
+          (state) =>
+            state.id === from
         );
 
+      const toState =
+        automaton.states.find(
+          (state) =>
+            state.id === to
+        );
 
       if (
-        symbol === null ||
-        symbol.trim() === ""
+        !fromState ||
+        !toState
       ) {
-
         setTransitionStart(
           null
         );
 
         setStatus(
-          "Transition cancelled"
+          "Unable to find selected states"
+        );
+
+        return;
+      }
+
+      // Open the proper transition editor
+      setTransitionModal({
+        open: true,
+        from: fromState,
+        to: toState,
+      });
+
+      setStatus(
+        `${from} → ${to} ready`
+      );
+
+      return;
+    }
+  };
+
+
+  /* =======================================================
+     CREATE TRANSITION FROM MODAL
+     ======================================================= */
+
+  const handleCreateTransition = (
+    symbol
+  ) => {
+
+    const from =
+      transitionModal.from?.id;
+
+    const to =
+      transitionModal.to?.id;
+
+    if (!from || !to) {
+      return;
+    }
+
+    const cleanSymbol =
+      symbol.trim();
+
+    if (!cleanSymbol) {
+      return;
+    }
+
+
+    /* -----------------------------------------------------
+       DFA VALIDATION
+       ----------------------------------------------------- */
+
+    if (
+      automatonType ===
+      "DFA"
+    ) {
+
+      // DFA cannot contain epsilon transitions
+      if (
+        cleanSymbol ===
+        "ε"
+      ) {
+
+        setStatus(
+          "DFA cannot use ε transitions"
         );
 
         return;
       }
 
 
-      const cleanSymbol =
-        symbol.trim();
-
-
-      /*
-       * DFA validation
-       */
-
-      if (
-        automatonType ===
-        "DFA"
-      ) {
-
-        if (
-          cleanSymbol ===
-          "ε"
-        ) {
-
-          setStatus(
-            "DFA cannot use ε transitions"
-          );
-
-          setTransitionStart(
-            null
-          );
-
-          return;
-        }
-
-
-        const duplicate =
-          automaton.transitions.some(
-            (transition) =>
-              transition.from ===
-                from &&
-              transition.symbol ===
-                cleanSymbol
-          );
-
-        if (duplicate) {
-
-          setStatus(
-            `DFA already has a transition from ${from} using ${cleanSymbol}`
-          );
-
-          setTransitionStart(
-            null
-          );
-
-          return;
-        }
-      }
-
-
-      const newTransition =
-        createTransition(
-          from,
-          to,
-          cleanSymbol
+      // DFA cannot have two transitions
+      // from the same state using the same symbol
+      const duplicate =
+        automaton.transitions.some(
+          (transition) =>
+            transition.from ===
+              from &&
+            transition.symbol ===
+              cleanSymbol
         );
 
+      if (duplicate) {
 
-      setAutomaton(
-        (previous) => ({
-          ...previous,
+        setStatus(
+          `DFA already has a transition from ${from} using ${cleanSymbol}`
+        );
 
-          transitions: [
-            ...previous.transitions,
-            newTransition,
-          ],
+        return;
+      }
+    }
 
-          alphabet:
-            cleanSymbol ===
-              "ε"
-              ? previous.alphabet
-              : previous.alphabet.includes(
-                  cleanSymbol
-                )
-                ? previous.alphabet
-                : [
-                    ...previous.alphabet,
-                    cleanSymbol,
-                  ],
-        })
+
+    /* -----------------------------------------------------
+       CREATE TRANSITION
+       ----------------------------------------------------- */
+
+    const newTransition =
+      createTransition(
+        from,
+        to,
+        cleanSymbol
       );
 
+
+    setAutomaton(
+      (previous) => ({
+        ...previous,
+
+        transitions: [
+          ...previous.transitions,
+          newTransition,
+        ],
+
+        alphabet:
+          cleanSymbol ===
+          "ε"
+            ? previous.alphabet
+            : previous.alphabet.includes(
+                cleanSymbol
+              )
+              ? previous.alphabet
+              : [
+                  ...previous.alphabet,
+                  cleanSymbol,
+                ],
+      })
+    );
+
+
+    // Close modal
+    setTransitionModal({
+      open: false,
+      from: null,
+      to: null,
+    });
+
+    // Clear selected source
+    setTransitionStart(
+      null
+    );
+
+    setStatus(
+      `${from} → ${to} (${cleanSymbol}) created`
+    );
+  };
+
+
+  /* =======================================================
+     CLOSE TRANSITION MODAL
+     ======================================================= */
+
+  const handleCloseTransitionModal =
+    () => {
+
+      setTransitionModal({
+        open: false,
+        from: null,
+        to: null,
+      });
 
       setTransitionStart(
         null
       );
 
-
-      /*
-       * IMPORTANT:
-       * Keep Transition tool selected.
-       */
-
       setStatus(
-        `${from} → ${to} (${cleanSymbol}) created`
+        "Transition cancelled"
       );
-
-      return;
-    }
-  };
+    };
 
 
   /* =======================================================
@@ -1587,6 +1656,29 @@ function App() {
         </section>
 
       </main>
+
+
+      {/* ===================================================
+          TRANSITION MODAL
+          =================================================== */}
+
+      <TransitionModal
+        isOpen={
+          transitionModal.open
+        }
+        fromState={
+          transitionModal.from
+        }
+        toState={
+          transitionModal.to
+        }
+        onClose={
+          handleCloseTransitionModal
+        }
+        onCreate={
+          handleCreateTransition
+        }
+      />
 
 
       {/* ===================================================
