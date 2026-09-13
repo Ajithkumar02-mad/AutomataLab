@@ -9,6 +9,7 @@ const Canvas = ({
   transitionStart,
   viewport,
   setViewport,
+  simulation,
   onCanvasClick,
   onStateMouseDown,
   onStateClick,
@@ -281,7 +282,12 @@ const Canvas = ({
             key={transition.id}
             transition={transition}
             states={states}
+            transitions={transitions}
             onDelete={onDeleteTransition}
+            isSimulationActive={
+              simulation?.activeTransitionId ===
+              transition.id
+            }
           />
         ))}
 
@@ -291,9 +297,19 @@ const Canvas = ({
             key={state.id}
             state={state}
             activeTool={activeTool}
+
             isTransitionStart={
               transitionStart === state.id
             }
+
+            isSimulationCurrent={
+              simulation?.currentState === state.id
+            }
+
+            isSimulationFailed={
+              simulation?.error?.state === state.id
+            }
+
             onMouseDown={onStateMouseDown}
             onClick={onStateClick}
           />
@@ -353,6 +369,43 @@ const Canvas = ({
           )}
 
       </div>
+
+      {simulation?.error && (
+  <div className="simulation-failure-popup">
+    <div className="simulation-popup-title">
+      ✕ Simulation Failed
+    </div>
+
+    <div className="simulation-popup-row">
+      <span>Reason</span>
+      <strong>
+        {simulation.error.message}
+      </strong>
+    </div>
+
+    {simulation.error.position && (
+      <div className="simulation-popup-row">
+        <span>Input Position</span>
+        <strong>
+          {simulation.error.position}
+        </strong>
+      </div>
+    )}
+
+    {simulation.error.symbol && (
+      <div className="simulation-popup-row">
+        <span>Symbol</span>
+        <strong>
+          "{simulation.error.symbol}"
+        </strong>
+      </div>
+    )}
+
+    <div className="simulation-popup-explanation">
+      {simulation.error.explanation}
+    </div>
+  </div>
+)}
 
       {/* ====================================
           ZOOM CONTROLS

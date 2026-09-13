@@ -26,27 +26,33 @@ import {
 
 import {
   saveAutomaton,
-  getSavedAutomata,
-  getRecentAutomata,
 } from "./utils/storage";
+
+import {
+  simulateDFA,
+  validateDFAForSimulation,
+} from "./algorithms/dfaSimulator";
 
 import "./App.css";
 
 
-/* =========================================================
-   STORAGE
-   ========================================================= */
+// =========================================================
+// STORAGE
+// =========================================================
 
 const CURRENT_PROJECT_KEY =
   "automatalab-current-project-v1";
 
 
+// =========================================================
+// LOAD CURRENT AUTOMATON
+// =========================================================
+
 const loadCurrentAutomaton = () => {
   try {
-    const saved =
-      localStorage.getItem(
-        CURRENT_PROJECT_KEY
-      );
+    const saved = localStorage.getItem(
+      CURRENT_PROJECT_KEY
+    );
 
     if (!saved) {
       return null;
@@ -62,7 +68,32 @@ const loadCurrentAutomaton = () => {
       return null;
     }
 
-    return parsed;
+    return {
+      ...createInitialAutomaton(),
+      ...parsed,
+
+      states: Array.isArray(parsed.states)
+        ? parsed.states
+        : [],
+
+      transitions: Array.isArray(
+        parsed.transitions
+      )
+        ? parsed.transitions
+        : [],
+
+      alphabet: Array.isArray(
+        parsed.alphabet
+      )
+        ? parsed.alphabet
+        : [],
+
+      finalStates: Array.isArray(
+        parsed.finalStates
+      )
+        ? parsed.finalStates
+        : [],
+    };
   } catch (error) {
     console.error(
       "AutomataLab load error:",
@@ -74,15 +105,15 @@ const loadCurrentAutomaton = () => {
 };
 
 
-/* =========================================================
-   APP
-   ========================================================= */
+// =========================================================
+// APP
+// =========================================================
 
 function App() {
 
-  /* -------------------------------------------------------
-     AUTOMATON
-     ------------------------------------------------------- */
+  // =======================================================
+  // AUTOMATON
+  // =======================================================
 
   const [automatonType, setAutomatonType] =
     useState(() => {
@@ -102,25 +133,25 @@ function App() {
     });
 
 
-  /* -------------------------------------------------------
-     TOOL
-     ------------------------------------------------------- */
+  // =======================================================
+  // TOOL
+  // =======================================================
 
   const [activeTool, setActiveTool] =
     useState("select");
 
 
-  /* -------------------------------------------------------
-     SIMULATION INPUT
-     ------------------------------------------------------- */
+  // =======================================================
+  // INPUT
+  // =======================================================
 
   const [input, setInput] =
     useState("");
 
 
-  /* -------------------------------------------------------
-     DRAGGING
-     ------------------------------------------------------- */
+  // =======================================================
+  // DRAGGING
+  // =======================================================
 
   const [dragging, setDragging] =
     useState(null);
@@ -129,31 +160,37 @@ function App() {
     useRef(false);
 
 
-  /* -------------------------------------------------------
-     TRANSITION
-     ------------------------------------------------------- */
+  // =======================================================
+  // TRANSITION
+  // =======================================================
 
-  const [transitionStart, setTransitionStart] =
-  useState(null);
+  const [
+    transitionStart,
+    setTransitionStart,
+  ] = useState(null);
 
-const [transitionModal, setTransitionModal] =
-  useState({
+
+  const [
+    transitionModal,
+    setTransitionModal,
+  ] = useState({
     open: false,
     from: null,
     to: null,
   });
 
-  /* -------------------------------------------------------
-     STATUS
-     ------------------------------------------------------- */
+
+  // =======================================================
+  // STATUS
+  // =======================================================
 
   const [status, setStatus] =
     useState("Ready");
 
 
-  /* -------------------------------------------------------
-     VIEWPORT
-     ------------------------------------------------------- */
+  // =======================================================
+  // VIEWPORT
+  // =======================================================
 
   const [viewport, setViewport] =
     useState({
@@ -163,9 +200,25 @@ const [transitionModal, setTransitionModal] =
     });
 
 
-  /* =======================================================
-     SAVE CURRENT PROJECT AUTOMATICALLY
-     ======================================================= */
+  // =======================================================
+  // SIMULATION
+  // =======================================================
+
+  const [simulation, setSimulation] =
+    useState({
+      running: false,
+      completed: false,
+      stepIndex: 0,
+      result: null,
+      error: null,
+      currentState: null,
+      activeTransitionId: null,
+    });
+
+
+  // =======================================================
+  // AUTO SAVE
+  // =======================================================
 
   useEffect(() => {
     try {
@@ -182,12 +235,28 @@ const [transitionModal, setTransitionModal] =
   }, [automaton]);
 
 
-  /* =======================================================
-     NEW AUTOMATON
-     ======================================================= */
+  // =======================================================
+  // CLEAR SIMULATION
+  // =======================================================
+
+  const clearSimulation = () => {
+    setSimulation({
+      running: false,
+      completed: false,
+      stepIndex: 0,
+      result: null,
+      error: null,
+      currentState: null,
+      activeTransitionId: null,
+    });
+  };
+
+
+  // =======================================================
+  // NEW AUTOMATON
+  // =======================================================
 
   const handleNew = () => {
-
     const confirmed =
       window.confirm(
         "Create a new automaton? Current work will be cleared."
@@ -206,6 +275,14 @@ const [transitionModal, setTransitionModal] =
 
     setTransitionStart(null);
 
+    setTransitionModal({
+      open: false,
+      from: null,
+      to: null,
+    });
+
+    clearSimulation();
+
     setViewport({
       x: 0,
       y: 0,
@@ -218,24 +295,27 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     RESET
-     ======================================================= */
+  // =======================================================
+  // RESET
+  // =======================================================
 
   const handleReset = () => {
-
-    const resetAutomaton = {
+    setAutomaton({
       ...createInitialAutomaton(),
       type: automatonType,
-    };
-
-    setAutomaton(
-      resetAutomaton
-    );
+    });
 
     setInput("");
 
     setTransitionStart(null);
+
+    setTransitionModal({
+      open: false,
+      from: null,
+      to: null,
+    });
+
+    clearSimulation();
 
     setViewport({
       x: 0,
@@ -249,9 +329,9 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     CHANGE AUTOMATON TYPE
-     ======================================================= */
+  // =======================================================
+  // CHANGE AUTOMATON TYPE
+  // =======================================================
 
   const handleTypeChange = (
     type
@@ -273,7 +353,17 @@ const [transitionModal, setTransitionModal] =
       type,
     });
 
+    setInput("");
+
     setTransitionStart(null);
+
+    setTransitionModal({
+      open: false,
+      from: null,
+      to: null,
+    });
+
+    clearSimulation();
 
     setViewport({
       x: 0,
@@ -287,12 +377,11 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     GENERATE STATE ID
-     ======================================================= */
+  // =======================================================
+  // NEXT STATE ID
+  // =======================================================
 
   const getNextStateId = () => {
-
     let number = 0;
 
     while (
@@ -308,9 +397,9 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     DELETE TRANSITION
-     ======================================================= */
+  // =======================================================
+  // DELETE TRANSITION
+  // =======================================================
 
   const handleDeleteTransition = (
     transitionId
@@ -329,15 +418,17 @@ const [transitionModal, setTransitionModal] =
       })
     );
 
+    clearSimulation();
+
     setStatus(
       "Transition deleted"
     );
   };
 
 
-  /* =======================================================
-     ADD STATE
-     ======================================================= */
+  // =======================================================
+  // ADD STATE
+  // =======================================================
 
   const handleCanvasClick = (
     event
@@ -377,25 +468,167 @@ const [transitionModal, setTransitionModal] =
       })
     );
 
+    clearSimulation();
+
     setStatus(
       `${id} created`
     );
   };
 
 
-  /* =======================================================
-     STATE CLICK
-     ======================================================= */
+  // =======================================================
+  // CREATE TRANSITION
+  // =======================================================
+
+  const handleCreateTransition = (
+    symbol
+  ) => {
+
+    const from =
+      transitionModal.from?.id;
+
+    const to =
+      transitionModal.to?.id;
+
+    if (!from || !to) {
+      return;
+    }
+
+    const cleanSymbol =
+      symbol.trim();
+
+    if (!cleanSymbol) {
+      return;
+    }
+
+
+    // -----------------------------------------------
+    // DFA VALIDATION
+    // -----------------------------------------------
+
+    if (
+      automatonType ===
+      "DFA"
+    ) {
+
+      if (
+        cleanSymbol ===
+        "ε"
+      ) {
+
+        setStatus(
+          "DFA cannot use ε transitions"
+        );
+
+        return;
+      }
+
+
+      const duplicate =
+        automaton.transitions.some(
+          (transition) =>
+            transition.from ===
+              from &&
+            transition.symbol ===
+              cleanSymbol
+        );
+
+
+      if (duplicate) {
+
+        setStatus(
+          `DFA already has a transition from ${from} using ${cleanSymbol}`
+        );
+
+        return;
+      }
+    }
+
+
+    // -----------------------------------------------
+    // CREATE
+    // -----------------------------------------------
+
+    const newTransition =
+      createTransition(
+        from,
+        to,
+        cleanSymbol
+      );
+
+
+    setAutomaton(
+      (previous) => ({
+        ...previous,
+
+        transitions: [
+          ...previous.transitions,
+          newTransition,
+        ],
+
+        alphabet:
+          cleanSymbol === "ε"
+            ? previous.alphabet
+            : previous.alphabet.includes(
+                cleanSymbol
+              )
+            ? previous.alphabet
+            : [
+                ...previous.alphabet,
+                cleanSymbol,
+              ],
+      })
+    );
+
+
+    setTransitionModal({
+      open: false,
+      from: null,
+      to: null,
+    });
+
+    setTransitionStart(null);
+
+    clearSimulation();
+
+    setStatus(
+      `${from} → ${to} (${cleanSymbol}) created`
+    );
+  };
+
+
+  // =======================================================
+  // CLOSE TRANSITION MODAL
+  // =======================================================
+
+  const handleCloseTransitionModal = () => {
+
+    setTransitionModal({
+      open: false,
+      from: null,
+      to: null,
+    });
+
+    setTransitionStart(null);
+
+    setStatus(
+      "Transition cancelled"
+    );
+  };
+
+
+  // =======================================================
+  // STATE CLICK
+  // =======================================================
 
   const handleStateClick = (
     event,
     stateId
   ) => {
 
-    /*
-     * If the user dragged the state,
-     * don't treat it as a click.
-     */
+    // -----------------------------------------------
+    // IGNORE CLICK AFTER DRAG
+    // -----------------------------------------------
 
     if (
       dragMovedRef.current
@@ -407,9 +640,9 @@ const [transitionModal, setTransitionModal] =
     }
 
 
-    /* -----------------------------------------------------
-       DELETE
-       ----------------------------------------------------- */
+    // -----------------------------------------------
+    // DELETE STATE
+    // -----------------------------------------------
 
     if (
       activeTool ===
@@ -450,6 +683,8 @@ const [transitionModal, setTransitionModal] =
         })
       );
 
+      clearSimulation();
+
       setStatus(
         `${stateId} deleted`
       );
@@ -458,9 +693,9 @@ const [transitionModal, setTransitionModal] =
     }
 
 
-    /* -----------------------------------------------------
-       SET START
-       ----------------------------------------------------- */
+    // -----------------------------------------------
+    // SET START
+    // -----------------------------------------------
 
     if (
       activeTool ===
@@ -487,10 +722,7 @@ const [transitionModal, setTransitionModal] =
         })
       );
 
-      /*
-       * IMPORTANT:
-       * Do NOT switch back to select.
-       */
+      clearSimulation();
 
       setStatus(
         `${stateId} set as start`
@@ -500,76 +732,59 @@ const [transitionModal, setTransitionModal] =
     }
 
 
-    /* -----------------------------------------------------
-       SET FINAL
-       ----------------------------------------------------- */
+    // -----------------------------------------------
+    // SET FINAL
+    // -----------------------------------------------
 
-    if (
-      activeTool ===
-      "final"
-    ) {
+    if (activeTool === "final") {
+  setAutomaton((previous) => {
+    const alreadyFinal =
+      previous.finalStates.includes(stateId);
 
-      setAutomaton(
-        (previous) => {
+    return {
+      ...previous,
 
-          const alreadyFinal =
-            previous.finalStates.includes(
-              stateId
-            );
+      finalStates: alreadyFinal
+        ? previous.finalStates.filter(
+            (id) => id !== stateId
+          )
+        : [
+            ...previous.finalStates,
+            stateId,
+          ],
 
-          return {
-            ...previous,
+      states: previous.states.map(
+        (state) =>
+          state.id === stateId
+            ? {
+                ...state,
+                isFinal: !alreadyFinal,
+              }
+            : state
+      ),
+    };
+  });
 
-            finalStates:
-              alreadyFinal
-                ? previous.finalStates.filter(
-                    (id) =>
-                      id !== stateId
-                  )
-                : [
-                    ...previous.finalStates,
-                    stateId,
-                  ],
+  setStatus(
+    automaton.finalStates.includes(stateId)
+      ? `${stateId} removed from final states`
+      : `${stateId} marked as final`
+  );
 
-            states:
-              previous.states.map(
-                (state) => ({
-                  ...state,
-
-                  isFinal:
-                    state.id ===
-                    stateId
-                      ? !alreadyFinal
-                      : state.isFinal,
-                })
-              ),
-          };
-        }
-      );
-
-      /*
-       * IMPORTANT:
-       * Tool remains Final.
-       */
-
-      setStatus(
-        `${stateId} final state updated`
-      );
-
-      return;
-    }
+  return;
+}
 
 
-    /* -----------------------------------------------------
-       CREATE TRANSITION
-       ----------------------------------------------------- */
+    // -----------------------------------------------
+    // CREATE TRANSITION
+    // -----------------------------------------------
 
     if (
       activeTool ===
       "transition"
     ) {
 
-      // First click = source state
+      // First click = source
       if (
         transitionStart ===
         null
@@ -586,41 +801,30 @@ const [transitionModal, setTransitionModal] =
         return;
       }
 
-      // Second click = destination state
+
+      // Second click = destination
       const from =
         transitionStart;
 
       const to =
         stateId;
 
+
       const fromState =
         automaton.states.find(
           (state) =>
-            state.id === from
+            state.id ===
+            from
         );
 
       const toState =
         automaton.states.find(
           (state) =>
-            state.id === to
+            state.id ===
+            to
         );
 
-      if (
-        !fromState ||
-        !toState
-      ) {
-        setTransitionStart(
-          null
-        );
 
-        setStatus(
-          "Unable to find selected states"
-        );
-
-        return;
-      }
-
-      // Open the proper transition editor
       setTransitionModal({
         open: true,
         from: fromState,
@@ -636,158 +840,9 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     CREATE TRANSITION FROM MODAL
-     ======================================================= */
-
-  const handleCreateTransition = (
-    symbol
-  ) => {
-
-    const from =
-      transitionModal.from?.id;
-
-    const to =
-      transitionModal.to?.id;
-
-    if (!from || !to) {
-      return;
-    }
-
-    const cleanSymbol =
-      symbol.trim();
-
-    if (!cleanSymbol) {
-      return;
-    }
-
-
-    /* -----------------------------------------------------
-       DFA VALIDATION
-       ----------------------------------------------------- */
-
-    if (
-      automatonType ===
-      "DFA"
-    ) {
-
-      // DFA cannot contain epsilon transitions
-      if (
-        cleanSymbol ===
-        "ε"
-      ) {
-
-        setStatus(
-          "DFA cannot use ε transitions"
-        );
-
-        return;
-      }
-
-
-      // DFA cannot have two transitions
-      // from the same state using the same symbol
-      const duplicate =
-        automaton.transitions.some(
-          (transition) =>
-            transition.from ===
-              from &&
-            transition.symbol ===
-              cleanSymbol
-        );
-
-      if (duplicate) {
-
-        setStatus(
-          `DFA already has a transition from ${from} using ${cleanSymbol}`
-        );
-
-        return;
-      }
-    }
-
-
-    /* -----------------------------------------------------
-       CREATE TRANSITION
-       ----------------------------------------------------- */
-
-    const newTransition =
-      createTransition(
-        from,
-        to,
-        cleanSymbol
-      );
-
-
-    setAutomaton(
-      (previous) => ({
-        ...previous,
-
-        transitions: [
-          ...previous.transitions,
-          newTransition,
-        ],
-
-        alphabet:
-          cleanSymbol ===
-          "ε"
-            ? previous.alphabet
-            : previous.alphabet.includes(
-                cleanSymbol
-              )
-              ? previous.alphabet
-              : [
-                  ...previous.alphabet,
-                  cleanSymbol,
-                ],
-      })
-    );
-
-
-    // Close modal
-    setTransitionModal({
-      open: false,
-      from: null,
-      to: null,
-    });
-
-    // Clear selected source
-    setTransitionStart(
-      null
-    );
-
-    setStatus(
-      `${from} → ${to} (${cleanSymbol}) created`
-    );
-  };
-
-
-  /* =======================================================
-     CLOSE TRANSITION MODAL
-     ======================================================= */
-
-  const handleCloseTransitionModal =
-    () => {
-
-      setTransitionModal({
-        open: false,
-        from: null,
-        to: null,
-      });
-
-      setTransitionStart(
-        null
-      );
-
-      setStatus(
-        "Transition cancelled"
-      );
-    };
-
-
-  /* =======================================================
-     DRAG STATE - START
-     ======================================================= */
+  // =======================================================
+  // STATE DRAG START
+  // =======================================================
 
   const handleStateMouseDown = (
     event,
@@ -795,9 +850,7 @@ const [transitionModal, setTransitionModal] =
   ) => {
 
     event.preventDefault();
-
     event.stopPropagation();
-
 
     const canvas =
       event.currentTarget.closest(
@@ -808,26 +861,22 @@ const [transitionModal, setTransitionModal] =
       return;
     }
 
-
     const rect =
       canvas.getBoundingClientRect();
-
 
     const state =
       automaton.states.find(
         (item) =>
-          item.id === stateId
+          item.id ===
+          stateId
       );
-
 
     if (!state) {
       return;
     }
 
-
     dragMovedRef.current =
       false;
-
 
     setDragging({
       stateId,
@@ -855,9 +904,9 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     DRAG STATE - MOVE
-     ======================================================= */
+  // =======================================================
+  // STATE DRAG MOVE
+  // =======================================================
 
   useEffect(() => {
 
@@ -869,17 +918,14 @@ const [transitionModal, setTransitionModal] =
         return;
       }
 
-
       const canvas =
         document.querySelector(
           ".canvas"
         );
 
-
       if (!canvas) {
         return;
       }
-
 
       const rect =
         canvas.getBoundingClientRect();
@@ -888,7 +934,6 @@ const [transitionModal, setTransitionModal] =
       const moveX =
         event.clientX -
         dragging.startClientX;
-
 
       const moveY =
         event.clientY -
@@ -899,6 +944,7 @@ const [transitionModal, setTransitionModal] =
         Math.abs(moveX) > 4 ||
         Math.abs(moveY) > 4
       ) {
+
         dragMovedRef.current =
           true;
       }
@@ -910,7 +956,6 @@ const [transitionModal, setTransitionModal] =
           viewport.x) /
           viewport.zoom -
         dragging.offsetX;
-
 
       const y =
         (event.clientY -
@@ -949,10 +994,9 @@ const [transitionModal, setTransitionModal] =
     };
 
 
-    const handleMouseUp =
-      () => {
-        setDragging(null);
-      };
+    const handleMouseUp = () => {
+      setDragging(null);
+    };
 
 
     window.addEventListener(
@@ -985,9 +1029,470 @@ const [transitionModal, setTransitionModal] =
   ]);
 
 
-  /* =======================================================
-     SAVE
-     ======================================================= */
+  // =======================================================
+  // RUN SIMULATION
+  // =======================================================
+
+  const handleRunSimulation = () => {
+
+    if (
+      automatonType !==
+      "DFA"
+    ) {
+
+      setStatus(
+        "Simulation currently supports DFA only"
+      );
+
+      return;
+    }
+
+
+    // Validate
+    const validationErrors =
+      validateDFAForSimulation(
+        automaton
+      );
+
+
+    if (
+      validationErrors.length >
+      0
+    ) {
+
+      setSimulation({
+        running: false,
+        completed: true,
+        stepIndex: 0,
+        result: "error",
+
+        error: {
+          type:
+            "INVALID_AUTOMATON",
+
+          message:
+            validationErrors[0],
+
+          explanation:
+            "The automaton must be valid before simulation can start.",
+        },
+
+        currentState: null,
+        activeTransitionId: null,
+      });
+
+      setStatus(
+        "Simulation failed: invalid DFA"
+      );
+
+      return;
+    }
+
+
+    // Simulate
+    const result =
+      simulateDFA(
+        automaton,
+        input
+      );
+
+
+    const steps =
+      result.steps || [];
+
+
+    const lastStep =
+      steps.length > 0
+        ? steps[steps.length - 1]
+        : null;
+
+
+    const currentState =
+      result.stoppedAt?.state ||
+      result.currentState ||
+      lastStep?.nextState ||
+      automaton.startState;
+
+
+    const activeTransitionId =
+      result.error
+        ? null
+        : lastStep?.transitionId ||
+          null;
+
+
+    let error = null;
+
+
+    // -----------------------------------------------
+    // MISSING TRANSITION
+    // -----------------------------------------------
+
+    if (
+      result.error &&
+      result.stoppedAt
+    ) {
+
+      error = {
+        type:
+          "MISSING_TRANSITION",
+
+        state:
+          result.stoppedAt.state,
+
+        symbol:
+          result.stoppedAt.symbol,
+
+        position:
+          result.stoppedAt.position +
+          1,
+
+        message:
+          result.error,
+
+        explanation:
+          `There is no transition from ${result.stoppedAt.state} for the input symbol "${result.stoppedAt.symbol}". The DFA cannot continue processing the remaining input.`,
+      };
+    }
+
+
+    // -----------------------------------------------
+    // OTHER ERROR
+    // -----------------------------------------------
+
+    else if (
+      result.error
+    ) {
+
+      error = {
+        type:
+          "SIMULATION_ERROR",
+
+        message:
+          result.error,
+
+        explanation:
+          "The simulation could not complete.",
+      };
+    }
+
+
+    // -----------------------------------------------
+    // NON-FINAL STATE
+    // -----------------------------------------------
+
+    else if (
+      result.success &&
+      !result.accepted
+    ) {
+
+      error = {
+        type:
+          "NON_FINAL_STATE",
+
+        state:
+          result.currentState,
+
+        message:
+          `Input was completely processed, but ${result.currentState} is not a final state.`,
+
+        explanation:
+          "A DFA accepts a string only when the complete input has been consumed and the automaton ends in a final state.",
+      };
+    }
+
+
+    setSimulation({
+      running: false,
+
+      completed: true,
+
+      stepIndex:
+        Math.max(
+          0,
+          steps.length - 1
+        ),
+
+      result:
+        result.error
+          ? "rejected"
+          : result.accepted
+          ? "accepted"
+          : "rejected",
+
+      error,
+
+      currentState,
+
+      activeTransitionId,
+    });
+
+
+    if (
+      result.accepted
+    ) {
+
+      setStatus(
+        `✓ Input accepted at ${result.currentState}`
+      );
+
+    } else {
+
+      setStatus(
+        `✕ Input rejected at ${
+          currentState ||
+          "undefined"
+        }`
+      );
+    }
+  };
+
+
+  // =======================================================
+  // STEP SIMULATION
+  // =======================================================
+
+  const handleStepSimulation = () => {
+
+    if (
+      automatonType !==
+      "DFA"
+    ) {
+
+      setStatus(
+        "Step simulation currently supports DFA only"
+      );
+
+      return;
+    }
+
+
+    const validationErrors =
+      validateDFAForSimulation(
+        automaton
+      );
+
+
+    if (
+      validationErrors.length >
+      0
+    ) {
+
+      setSimulation({
+        running: false,
+        completed: true,
+        stepIndex: 0,
+        result: "error",
+
+        error: {
+          type:
+            "INVALID_AUTOMATON",
+
+          message:
+            validationErrors[0],
+
+          explanation:
+            "Fix the DFA before starting simulation.",
+        },
+
+        currentState: null,
+        activeTransitionId: null,
+      });
+
+      setStatus(
+        "Invalid DFA"
+      );
+
+      return;
+    }
+
+
+    const result =
+      simulateDFA(
+        automaton,
+        input
+      );
+
+
+    const steps =
+      result.steps || [];
+
+
+    if (
+      steps.length === 0
+    ) {
+
+      setStatus(
+        "No simulation steps available"
+      );
+
+      return;
+    }
+
+
+    setSimulation(
+      (previous) => {
+
+        /*
+         * If simulation was already completed,
+         * start again from step 0.
+         */
+        const startingIndex =
+          previous.completed
+            ? -1
+            : previous.stepIndex;
+
+
+        const nextIndex =
+          Math.min(
+            startingIndex + 1,
+            steps.length - 1
+          );
+
+
+        const step =
+          steps[nextIndex];
+
+
+        const finished =
+          nextIndex ===
+          steps.length - 1;
+
+
+        let resultType =
+          null;
+
+        let error =
+          null;
+
+
+        // -------------------------------------------
+        // FINISHED WITH MISSING TRANSITION
+        // -------------------------------------------
+
+        if (
+          finished &&
+          result.error &&
+          result.stoppedAt
+        ) {
+
+          resultType =
+            "rejected";
+
+          error = {
+            type:
+              "MISSING_TRANSITION",
+
+            state:
+              result.stoppedAt.state,
+
+            symbol:
+              result.stoppedAt.symbol,
+
+            position:
+              result.stoppedAt.position +
+              1,
+
+            message:
+              result.error,
+
+            explanation:
+              `There is no transition from ${result.stoppedAt.state} for "${result.stoppedAt.symbol}". The DFA cannot continue.`,
+          };
+        }
+
+
+        // -------------------------------------------
+        // FINISHED + ACCEPTED
+        // -------------------------------------------
+
+        else if (
+          finished &&
+          result.accepted
+        ) {
+
+          resultType =
+            "accepted";
+        }
+
+
+        // -------------------------------------------
+        // FINISHED + NON-FINAL
+        // -------------------------------------------
+
+        else if (
+          finished &&
+          !result.accepted
+        ) {
+
+          resultType =
+            "rejected";
+
+          error = {
+            type:
+              "NON_FINAL_STATE",
+
+            state:
+              result.currentState,
+
+            message:
+              `Input was completely processed, but ${result.currentState} is not a final state.`,
+
+            explanation:
+              "The input was consumed, but the DFA did not finish in a final state.",
+          };
+        }
+
+
+        if (
+          finished
+        ) {
+
+          setStatus(
+            result.accepted
+              ? `✓ Input accepted at ${result.currentState}`
+              : `✕ Input rejected`
+          );
+
+        } else {
+
+          setStatus(
+            `Step ${nextIndex} / ${
+              steps.length - 1
+            }`
+          );
+        }
+
+
+        return {
+
+          running: false,
+
+          completed: finished,
+
+          stepIndex:
+            nextIndex,
+
+          result:
+            resultType,
+
+          error,
+
+          currentState:
+            step.nextState,
+
+          activeTransitionId:
+            step.transitionId ||
+            null,
+        };
+      }
+    );
+  };
+
+
+  // =======================================================
+  // SAVE
+  // =======================================================
 
   const handleSave = () => {
 
@@ -1010,9 +1515,11 @@ const [transitionModal, setTransitionModal] =
     saveAutomaton(
       {
         ...automaton,
+
         name:
           name.trim(),
       },
+
       name.trim()
     );
 
@@ -1023,9 +1530,9 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     EXPORT JSON
-     ======================================================= */
+  // =======================================================
+  // EXPORT JSON
+  // =======================================================
 
   const handleExport = () => {
 
@@ -1059,11 +1566,11 @@ const [transitionModal, setTransitionModal] =
       );
 
 
-    link.href = url;
+    link.href =
+      url;
 
     link.download =
       "automatalab-automaton.json";
-
 
     link.click();
 
@@ -1079,9 +1586,9 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     ZOOM
-     ======================================================= */
+  // =======================================================
+  // ZOOM
+  // =======================================================
 
   const zoomIn = () => {
 
@@ -1089,15 +1596,17 @@ const [transitionModal, setTransitionModal] =
       (previous) => ({
         ...previous,
 
-        zoom: Math.min(
-          2.5,
-          Number(
-            (
-              previous.zoom +
-              0.1
-            ).toFixed(2)
-          )
-        ),
+        zoom:
+          Math.min(
+            2.5,
+
+            Number(
+              (
+                previous.zoom +
+                0.1
+              ).toFixed(2)
+            )
+          ),
       })
     );
   };
@@ -1109,15 +1618,17 @@ const [transitionModal, setTransitionModal] =
       (previous) => ({
         ...previous,
 
-        zoom: Math.max(
-          0.4,
-          Number(
-            (
-              previous.zoom -
-              0.1
-            ).toFixed(2)
-          )
-        ),
+        zoom:
+          Math.max(
+            0.4,
+
+            Number(
+              (
+                previous.zoom -
+                0.1
+              ).toFixed(2)
+            )
+          ),
       })
     );
   };
@@ -1134,16 +1645,16 @@ const [transitionModal, setTransitionModal] =
   };
 
 
-  /* =======================================================
-     UI
-     ======================================================= */
+  // =======================================================
+  // UI
+  // =======================================================
 
   return (
     <div className="app">
 
-      {/* ===================================================
+      {/* =================================================
           HEADER
-          =================================================== */}
+          ================================================= */}
 
       <header className="header">
 
@@ -1154,6 +1665,7 @@ const [transitionModal, setTransitionModal] =
           </div>
 
           <div>
+
             <h1>
               AutomataLab
             </h1>
@@ -1161,6 +1673,7 @@ const [transitionModal, setTransitionModal] =
             <span>
               Interactive Automata Simulator
             </span>
+
           </div>
 
         </div>
@@ -1172,11 +1685,13 @@ const [transitionModal, setTransitionModal] =
             value={
               automatonType
             }
+
             onChange={(event) =>
               handleTypeChange(
                 event.target.value
               )
             }
+
             className="type-select"
           >
 
@@ -1240,12 +1755,11 @@ const [transitionModal, setTransitionModal] =
       </header>
 
 
-      {/* ===================================================
+      {/* =================================================
           WORKSPACE
-          =================================================== */}
+          ================================================= */}
 
       <main className="workspace">
-
 
         {/* =================================================
             SIDEBAR
@@ -1267,6 +1781,7 @@ const [transitionModal, setTransitionModal] =
                 ? "active"
                 : ""
             }`}
+
             onClick={() =>
               setActiveTool(
                 "select"
@@ -1292,6 +1807,7 @@ const [transitionModal, setTransitionModal] =
                 ? "active"
                 : ""
             }`}
+
             onClick={() =>
               setActiveTool(
                 "add-state"
@@ -1315,6 +1831,7 @@ const [transitionModal, setTransitionModal] =
                 ? "active"
                 : ""
             }`}
+
             onClick={() => {
 
               setActiveTool(
@@ -1349,6 +1866,7 @@ const [transitionModal, setTransitionModal] =
                 ? "active"
                 : ""
             }`}
+
             onClick={() =>
               setActiveTool(
                 "start"
@@ -1372,6 +1890,7 @@ const [transitionModal, setTransitionModal] =
                 ? "active"
                 : ""
             }`}
+
             onClick={() =>
               setActiveTool(
                 "final"
@@ -1395,6 +1914,7 @@ const [transitionModal, setTransitionModal] =
                 ? "active"
                 : ""
             }`}
+
             onClick={() =>
               setActiveTool(
                 "delete"
@@ -1492,7 +2012,6 @@ const [transitionModal, setTransitionModal] =
 
         <section className="canvas-area">
 
-
           <div className="canvas-toolbar">
 
             <div>
@@ -1520,6 +2039,7 @@ const [transitionModal, setTransitionModal] =
 
 
           <Canvas
+
             states={
               automaton.states
             }
@@ -1542,6 +2062,10 @@ const [transitionModal, setTransitionModal] =
 
             setViewport={
               setViewport
+            }
+
+            simulation={
+              simulation
             }
 
             onCanvasClick={
@@ -1575,6 +2099,7 @@ const [transitionModal, setTransitionModal] =
             resetZoom={
               resetZoom
             }
+
           />
 
 
@@ -1592,24 +2117,31 @@ const [transitionModal, setTransitionModal] =
 
               <input
                 type="text"
+
                 placeholder="Enter input e.g. 10101"
+
                 value={input}
-                onChange={(event) =>
+
+                onChange={(event) => {
+
                   setInput(
                     event.target.value
-                  )
-                }
+                  );
+
+                  clearSimulation();
+                }}
               />
 
             </div>
 
 
+            {/* RUN */}
+
             <button
               className="run-button"
-              onClick={() =>
-                setStatus(
-                  "Simulation engine will be connected next"
-                )
+
+              onClick={
+                handleRunSimulation
               }
             >
 
@@ -1620,12 +2152,13 @@ const [transitionModal, setTransitionModal] =
             </button>
 
 
+            {/* STEP */}
+
             <button
               className="secondary-button"
-              onClick={() =>
-                setStatus(
-                  "Step simulation will be connected next"
-                )
+
+              onClick={
+                handleStepSimulation
               }
             >
 
@@ -1636,8 +2169,11 @@ const [transitionModal, setTransitionModal] =
             </button>
 
 
+            {/* RESET */}
+
             <button
               className="secondary-button"
+
               onClick={
                 handleReset
               }
@@ -1651,6 +2187,49 @@ const [transitionModal, setTransitionModal] =
 
             </button>
 
+
+            {/* RESULT */}
+
+            {simulation.result && (
+
+              <div
+                className={`simulation-result ${
+                  simulation.result ===
+                  "accepted"
+                    ? "simulation-accepted"
+                    : simulation.result ===
+                      "rejected"
+                    ? "simulation-rejected"
+                    : "simulation-error"
+                }`}
+              >
+
+                <div className="simulation-result-main">
+
+                  {simulation.result ===
+                  "accepted"
+                    ? "✓ ACCEPTED"
+                    : simulation.result ===
+                      "rejected"
+                    ? "✕ REJECTED"
+                    : "⚠ ERROR"}
+
+                </div>
+
+
+                <div className="simulation-result-detail">
+
+                  Current state:{" "}
+
+                  {simulation.currentState ||
+                    "—"}
+
+                </div>
+
+              </div>
+
+            )}
+
           </div>
 
         </section>
@@ -1658,32 +2237,38 @@ const [transitionModal, setTransitionModal] =
       </main>
 
 
-      {/* ===================================================
+      {/* =================================================
           TRANSITION MODAL
-          =================================================== */}
+          ================================================= */}
 
       <TransitionModal
+
         isOpen={
           transitionModal.open
         }
+
         fromState={
           transitionModal.from
         }
+
         toState={
           transitionModal.to
         }
+
         onClose={
           handleCloseTransitionModal
         }
+
         onCreate={
           handleCreateTransition
         }
+
       />
 
 
-      {/* ===================================================
+      {/* =================================================
           FOOTER
-          =================================================== */}
+          ================================================= */}
 
       <footer className="status-bar">
 
