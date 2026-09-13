@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Plus,
@@ -27,40 +27,168 @@ import {
   saveAutomaton,
   getSavedAutomata,
   getRecentAutomata,
-  deleteSavedAutomaton,
-  clearRecentAutomata,
-  addRecentAutomaton,
 } from "./utils/storage";
 
 import "./App.css";
 
-function App() {
-  const [automatonType, setAutomatonType] = useState("DFA");
 
-  const [automaton, setAutomaton] = useState(
-    createInitialAutomaton()
-  );
+/* =========================================================
+   STORAGE
+   ========================================================= */
 
-  const [activeTool, setActiveTool] = useState("select");
+const CURRENT_PROJECT_KEY =
+  "automatalab-current-project-v1";
 
-  const [input, setInput] = useState("");
 
-  const [dragging, setDragging] = useState(null);
+const loadCurrentAutomaton = () => {
+  try {
+    const saved =
+      localStorage.getItem(
+        CURRENT_PROJECT_KEY
+      );
 
-  const [status, setStatus] = useState("Ready");
+    if (!saved) {
+      return null;
+    }
 
-  /*
-   * --------------------------------
-   * NEW AUTOMATON
-   * --------------------------------
-   */
+    const parsed = JSON.parse(saved);
 
-  const handleNew = () => {
-    const confirmed = window.confirm(
-      "Create a new automaton? Current work will be cleared."
+    if (
+      !parsed ||
+      !Array.isArray(parsed.states) ||
+      !Array.isArray(parsed.transitions)
+    ) {
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error(
+      "AutomataLab load error:",
+      error
     );
 
-    if (!confirmed) return;
+    return null;
+  }
+};
+
+
+/* =========================================================
+   APP
+   ========================================================= */
+
+function App() {
+
+  /* -------------------------------------------------------
+     AUTOMATON
+     ------------------------------------------------------- */
+
+  const [automatonType, setAutomatonType] =
+    useState(() => {
+      const saved =
+        loadCurrentAutomaton();
+
+      return saved?.type || "DFA";
+    });
+
+
+  const [automaton, setAutomaton] =
+    useState(() => {
+      return (
+        loadCurrentAutomaton() ||
+        createInitialAutomaton()
+      );
+    });
+
+
+  /* -------------------------------------------------------
+     TOOL
+     ------------------------------------------------------- */
+
+  const [activeTool, setActiveTool] =
+    useState("select");
+
+
+  /* -------------------------------------------------------
+     SIMULATION INPUT
+     ------------------------------------------------------- */
+
+  const [input, setInput] =
+    useState("");
+
+
+  /* -------------------------------------------------------
+     DRAGGING
+     ------------------------------------------------------- */
+
+  const [dragging, setDragging] =
+    useState(null);
+
+  const dragMovedRef =
+    useRef(false);
+
+
+  /* -------------------------------------------------------
+     TRANSITION
+     ------------------------------------------------------- */
+
+  const [transitionStart, setTransitionStart] =
+    useState(null);
+
+
+  /* -------------------------------------------------------
+     STATUS
+     ------------------------------------------------------- */
+
+  const [status, setStatus] =
+    useState("Ready");
+
+
+  /* -------------------------------------------------------
+     VIEWPORT
+     ------------------------------------------------------- */
+
+  const [viewport, setViewport] =
+    useState({
+      x: 0,
+      y: 0,
+      zoom: 1,
+    });
+
+
+  /* =======================================================
+     SAVE CURRENT PROJECT AUTOMATICALLY
+     ======================================================= */
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        CURRENT_PROJECT_KEY,
+        JSON.stringify(automaton)
+      );
+    } catch (error) {
+      console.error(
+        "AutomataLab save error:",
+        error
+      );
+    }
+  }, [automaton]);
+
+
+  /* =======================================================
+     NEW AUTOMATON
+     ======================================================= */
+
+  const handleNew = () => {
+
+    const confirmed =
+      window.confirm(
+        "Create a new automaton? Current work will be cleared."
+      );
+
+    if (!confirmed) {
+      return;
+    }
 
     setAutomaton({
       ...createInitialAutomaton(),
@@ -68,64 +196,102 @@ function App() {
     });
 
     setInput("");
-    setActiveTool("select");
-    setStatus("New automaton created");
+
+    setTransitionStart(null);
+
+    setViewport({
+      x: 0,
+      y: 0,
+      zoom: 1,
+    });
+
+    setStatus(
+      "New automaton created"
+    );
   };
 
-  /*
-   * --------------------------------
-   * RESET
-   * --------------------------------
-   */
+
+  /* =======================================================
+     RESET
+     ======================================================= */
 
   const handleReset = () => {
-    setAutomaton((previous) => ({
-      ...previous,
-      states: [],
-      transitions: [],
-      startState: null,
-      finalStates: [],
-    }));
+
+    const resetAutomaton = {
+      ...createInitialAutomaton(),
+      type: automatonType,
+    };
+
+    setAutomaton(
+      resetAutomaton
+    );
 
     setInput("");
-    setActiveTool("select");
-    setStatus("Automaton reset");
+
+    setTransitionStart(null);
+
+    setViewport({
+      x: 0,
+      y: 0,
+      zoom: 1,
+    });
+
+    setStatus(
+      "Automaton reset"
+    );
   };
 
-  /*
-   * --------------------------------
-   * CHANGE AUTOMATON TYPE
-   * --------------------------------
-   */
 
-  const handleTypeChange = (type) => {
+  /* =======================================================
+     CHANGE AUTOMATON TYPE
+     ======================================================= */
+
+  const handleTypeChange = (
+    type
+  ) => {
+
+    const confirmed =
+      window.confirm(
+        `Switch to ${type}? Current automaton will be cleared.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
     setAutomatonType(type);
 
-    setAutomaton((previous) => ({
-      ...previous,
+    setAutomaton({
+      ...createInitialAutomaton(),
       type,
-      states: [],
-      transitions: [],
-      startState: null,
-      finalStates: [],
-    }));
+    });
 
-    setActiveTool("select");
-    setStatus(`${type} selected`);
+    setTransitionStart(null);
+
+    setViewport({
+      x: 0,
+      y: 0,
+      zoom: 1,
+    });
+
+    setStatus(
+      `${type} selected`
+    );
   };
 
-  /*
-   * --------------------------------
-   * GENERATE STATE ID
-   * --------------------------------
-   */
+
+  /* =======================================================
+     GENERATE STATE ID
+     ======================================================= */
 
   const getNextStateId = () => {
+
     let number = 0;
 
     while (
       automaton.states.some(
-        (state) => state.id === `q${number}`
+        (state) =>
+          state.id === `q${number}`
       )
     ) {
       number++;
@@ -134,374 +300,591 @@ function App() {
     return `q${number}`;
   };
 
-/*
-   * --------------------------------
-   * DELETE TRANSITION
-   * --------------------------------
-   */
+
+  /* =======================================================
+     DELETE TRANSITION
+     ======================================================= */
 
   const handleDeleteTransition = (
-  transitionId
-) => {
-  setAutomaton((previous) => ({
-    ...previous,
+    transitionId
+  ) => {
 
-    transitions:
-      previous.transitions.filter(
-        (transition) =>
-          transition.id !==
-          transitionId
-      ),
-  }));
+    setAutomaton(
+      (previous) => ({
+        ...previous,
 
-  setStatus(
-    "Transition deleted"
-  );
-};
+        transitions:
+          previous.transitions.filter(
+            (transition) =>
+              transition.id !==
+              transitionId
+          ),
+      })
+    );
 
-  /*
-   * --------------------------------
-   * ADD STATE
-   * --------------------------------
-   */
+    setStatus(
+      "Transition deleted"
+    );
+  };
 
-  const handleCanvasClick = (event) => {
-    if (activeTool !== "add-state") {
+
+  /* =======================================================
+     ADD STATE
+     ======================================================= */
+
+  const handleCanvasClick = (
+    event
+  ) => {
+
+    if (
+      activeTool !==
+      "add-state"
+    ) {
       return;
     }
 
-    const canvas = event.currentTarget;
-
-    const rect = canvas.getBoundingClientRect();
-
     const x =
-      event.clientX -
-      rect.left -
-      32;
+      event.clientX - 32;
 
     const y =
-      event.clientY -
-      rect.top -
-      32;
+      event.clientY - 32;
 
-    const id = getNextStateId();
+    const id =
+      getNextStateId();
 
-    const newState = createState(
-      id,
-      Math.max(10, x),
-      Math.max(10, y)
+    const newState =
+      createState(
+        id,
+        Math.max(10, x),
+        Math.max(10, y)
+      );
+
+    setAutomaton(
+      (previous) => ({
+        ...previous,
+
+        states: [
+          ...previous.states,
+          newState,
+        ],
+      })
     );
 
-    setAutomaton((previous) => ({
-      ...previous,
-
-      states: [
-        ...previous.states,
-        newState,
-      ],
-    }));
-
-    setStatus(`${id} created`);
+    setStatus(
+      `${id} created`
+    );
   };
 
-  /*
-   * --------------------------------
-   * STATE CLICK
-   * --------------------------------
-   */
+
+  /* =======================================================
+     STATE CLICK
+     ======================================================= */
 
   const handleStateClick = (
-  event,
-  stateId
-) => {
+    event,
+    stateId
+  ) => {
 
-  /*
-   * DELETE
-   */
+    /*
+     * If the user dragged the state,
+     * don't treat it as a click.
+     */
 
-  if (activeTool === "delete") {
+    if (
+      dragMovedRef.current
+    ) {
+      dragMovedRef.current =
+        false;
 
-    setAutomaton((previous) => ({
-      ...previous,
-
-      states:
-        previous.states.filter(
-          (state) =>
-            state.id !== stateId
-        ),
-
-      transitions:
-        previous.transitions.filter(
-          (transition) =>
-            transition.from !== stateId &&
-            transition.to !== stateId
-        ),
-
-      startState:
-        previous.startState === stateId
-          ? null
-          : previous.startState,
-
-      finalStates:
-        previous.finalStates.filter(
-          (id) =>
-            id !== stateId
-        ),
-    }));
-
-    setStatus(
-      `${stateId} deleted`
-    );
-
-    return;
-  }
+      return;
+    }
 
 
-  /*
-   * SET START
-   */
+    /* -----------------------------------------------------
+       DELETE
+       ----------------------------------------------------- */
 
-  if (activeTool === "start") {
+    if (
+      activeTool ===
+      "delete"
+    ) {
 
-    setAutomaton((previous) => ({
-      ...previous,
+      setAutomaton(
+        (previous) => ({
+          ...previous,
 
-      startState: stateId,
+          states:
+            previous.states.filter(
+              (state) =>
+                state.id !==
+                stateId
+            ),
 
-      states:
-        previous.states.map(
-          (state) => ({
-            ...state,
+          transitions:
+            previous.transitions.filter(
+              (transition) =>
+                transition.from !==
+                  stateId &&
+                transition.to !==
+                  stateId
+            ),
 
-            isStart:
-              state.id === stateId,
-          })
-        ),
-    }));
+          startState:
+            previous.startState ===
+            stateId
+              ? null
+              : previous.startState,
 
-    setActiveTool("select");
+          finalStates:
+            previous.finalStates.filter(
+              (id) =>
+                id !== stateId
+            ),
+        })
+      );
 
-    setStatus(
-      `${stateId} set as start`
-    );
+      setStatus(
+        `${stateId} deleted`
+      );
 
-    return;
-  }
+      return;
+    }
 
 
-  /*
-   * SET FINAL
-   */
+    /* -----------------------------------------------------
+       SET START
+       ----------------------------------------------------- */
 
-  if (activeTool === "final") {
+    if (
+      activeTool ===
+      "start"
+    ) {
 
-    setAutomaton((previous) => {
+      setAutomaton(
+        (previous) => ({
+          ...previous,
 
-      const alreadyFinal =
-        previous.finalStates.includes(
+          startState:
+            stateId,
+
+          states:
+            previous.states.map(
+              (state) => ({
+                ...state,
+
+                isStart:
+                  state.id ===
+                  stateId,
+              })
+            ),
+        })
+      );
+
+      /*
+       * IMPORTANT:
+       * Do NOT switch back to select.
+       */
+
+      setStatus(
+        `${stateId} set as start`
+      );
+
+      return;
+    }
+
+
+    /* -----------------------------------------------------
+       SET FINAL
+       ----------------------------------------------------- */
+
+    if (
+      activeTool ===
+      "final"
+    ) {
+
+      setAutomaton(
+        (previous) => {
+
+          const alreadyFinal =
+            previous.finalStates.includes(
+              stateId
+            );
+
+          return {
+            ...previous,
+
+            finalStates:
+              alreadyFinal
+                ? previous.finalStates.filter(
+                    (id) =>
+                      id !== stateId
+                  )
+                : [
+                    ...previous.finalStates,
+                    stateId,
+                  ],
+
+            states:
+              previous.states.map(
+                (state) => ({
+                  ...state,
+
+                  isFinal:
+                    state.id ===
+                    stateId
+                      ? !alreadyFinal
+                      : state.isFinal,
+                })
+              ),
+          };
+        }
+      );
+
+      /*
+       * IMPORTANT:
+       * Tool remains Final.
+       */
+
+      setStatus(
+        `${stateId} final state updated`
+      );
+
+      return;
+    }
+
+
+    /* -----------------------------------------------------
+       CREATE TRANSITION
+       ----------------------------------------------------- */
+
+    if (
+      activeTool ===
+      "transition"
+    ) {
+
+      if (
+        transitionStart ===
+        null
+      ) {
+
+        setTransitionStart(
           stateId
         );
 
-      return {
-        ...previous,
+        setStatus(
+          `${stateId} selected as source`
+        );
 
-        finalStates:
-          alreadyFinal
-            ? previous.finalStates.filter(
-                (id) =>
-                  id !== stateId
-              )
-            : [
-                ...previous.finalStates,
-                stateId,
-              ],
-
-        states:
-          previous.states.map(
-            (state) => ({
-              ...state,
-
-              isFinal:
-                state.id === stateId
-                  ? !alreadyFinal
-                  : state.isFinal,
-            })
-          ),
-      };
-    });
-
-    setActiveTool("select");
-
-    setStatus(
-      `${stateId} final state updated`
-    );
-
-    return;
-  }
+        return;
+      }
 
 
-  /*
-   * CREATE TRANSITION
-   */
+      const from =
+        transitionStart;
 
-  if (activeTool === "transition") {
+      const to =
+        stateId;
 
-    if (!transitionStart) {
 
-      setTransitionStart(stateId);
+      const symbol =
+        window.prompt(
+          "Enter transition symbol:",
+          "0"
+        );
+
+
+      if (
+        symbol === null ||
+        symbol.trim() === ""
+      ) {
+
+        setTransitionStart(
+          null
+        );
+
+        setStatus(
+          "Transition cancelled"
+        );
+
+        return;
+      }
+
+
+      const cleanSymbol =
+        symbol.trim();
+
+
+      /*
+       * DFA validation
+       */
+
+      if (
+        automatonType ===
+        "DFA"
+      ) {
+
+        if (
+          cleanSymbol ===
+          "ε"
+        ) {
+
+          setStatus(
+            "DFA cannot use ε transitions"
+          );
+
+          setTransitionStart(
+            null
+          );
+
+          return;
+        }
+
+
+        const duplicate =
+          automaton.transitions.some(
+            (transition) =>
+              transition.from ===
+                from &&
+              transition.symbol ===
+                cleanSymbol
+          );
+
+        if (duplicate) {
+
+          setStatus(
+            `DFA already has a transition from ${from} using ${cleanSymbol}`
+          );
+
+          setTransitionStart(
+            null
+          );
+
+          return;
+        }
+      }
+
+
+      const newTransition =
+        createTransition(
+          from,
+          to,
+          cleanSymbol
+        );
+
+
+      setAutomaton(
+        (previous) => ({
+          ...previous,
+
+          transitions: [
+            ...previous.transitions,
+            newTransition,
+          ],
+
+          alphabet:
+            cleanSymbol ===
+              "ε"
+              ? previous.alphabet
+              : previous.alphabet.includes(
+                  cleanSymbol
+                )
+                ? previous.alphabet
+                : [
+                    ...previous.alphabet,
+                    cleanSymbol,
+                  ],
+        })
+      );
+
+
+      setTransitionStart(
+        null
+      );
+
+
+      /*
+       * IMPORTANT:
+       * Keep Transition tool selected.
+       */
 
       setStatus(
-        `Select destination state`
+        `${from} → ${to} (${cleanSymbol}) created`
       );
 
       return;
     }
+  };
 
-    const from = transitionStart;
-    const to = stateId;
 
-    const symbol =
-      window.prompt(
-        "Enter transition symbol:",
-        "0"
-      );
-
-    if (
-      symbol === null ||
-      symbol.trim() === ""
-    ) {
-      setTransitionStart(null);
-      setStatus(
-        "Transition cancelled"
-      );
-      return;
-    }
-
-    const newTransition =
-      createTransition(
-        from,
-        to,
-        symbol.trim()
-      );
-
-    setAutomaton((previous) => ({
-      ...previous,
-
-      transitions: [
-        ...previous.transitions,
-        newTransition,
-      ],
-
-      alphabet:
-        previous.alphabet.includes(
-          symbol.trim()
-        )
-          ? previous.alphabet
-          : [
-              ...previous.alphabet,
-              symbol.trim(),
-            ],
-    }));
-
-    setTransitionStart(null);
-
-    setActiveTool("select");
-
-    setStatus(
-      `${from} → ${to} created`
-    );
-  }
-};
-
-  /*
-   * --------------------------------
-   * DRAG STATE
-   * --------------------------------
-   */
+  /* =======================================================
+     DRAG STATE - START
+     ======================================================= */
 
   const handleStateMouseDown = (
     event,
     stateId
   ) => {
-    if (activeTool !== "select") {
+
+    event.preventDefault();
+
+    event.stopPropagation();
+
+
+    const canvas =
+      event.currentTarget.closest(
+        ".canvas"
+      );
+
+    if (!canvas) {
       return;
     }
 
-    const canvas =
-      event.currentTarget.parentElement;
 
     const rect =
       canvas.getBoundingClientRect();
 
+
     const state =
       automaton.states.find(
-        (item) => item.id === stateId
+        (item) =>
+          item.id === stateId
       );
 
-    if (!state) return;
+
+    if (!state) {
+      return;
+    }
+
+
+    dragMovedRef.current =
+      false;
+
 
     setDragging({
       stateId,
+
+      startClientX:
+        event.clientX,
+
+      startClientY:
+        event.clientY,
+
       offsetX:
-        event.clientX -
-        rect.left -
+        (event.clientX -
+          rect.left -
+          viewport.x) /
+          viewport.zoom -
         state.x,
 
       offsetY:
-        event.clientY -
-        rect.top -
+        (event.clientY -
+          rect.top -
+          viewport.y) /
+          viewport.zoom -
         state.y,
     });
   };
 
-  /*
-   * --------------------------------
-   * HANDLE DRAGGING
-   * --------------------------------
-   */
+
+  /* =======================================================
+     DRAG STATE - MOVE
+     ======================================================= */
 
   useEffect(() => {
-    const handleMouseMove = (event) => {
-      if (!dragging) return;
+
+    const handleMouseMove = (
+      event
+    ) => {
+
+      if (!dragging) {
+        return;
+      }
+
 
       const canvas =
-        document.querySelector(".canvas");
+        document.querySelector(
+          ".canvas"
+        );
 
-      if (!canvas) return;
+
+      if (!canvas) {
+        return;
+      }
+
 
       const rect =
         canvas.getBoundingClientRect();
 
-      const x =
+
+      const moveX =
         event.clientX -
-        rect.left -
+        dragging.startClientX;
+
+
+      const moveY =
+        event.clientY -
+        dragging.startClientY;
+
+
+      if (
+        Math.abs(moveX) > 4 ||
+        Math.abs(moveY) > 4
+      ) {
+        dragMovedRef.current =
+          true;
+      }
+
+
+      const x =
+        (event.clientX -
+          rect.left -
+          viewport.x) /
+          viewport.zoom -
         dragging.offsetX;
 
+
       const y =
-        event.clientY -
-        rect.top -
+        (event.clientY -
+          rect.top -
+          viewport.y) /
+          viewport.zoom -
         dragging.offsetY;
 
-      setAutomaton((previous) => ({
-        ...previous,
 
-        states: previous.states.map(
-          (state) =>
-            state.id ===
-            dragging.stateId
-              ? {
-                  ...state,
-                  x: Math.max(0, x),
-                  y: Math.max(0, y),
-                }
-              : state
-        ),
-      }));
+      setAutomaton(
+        (previous) => ({
+          ...previous,
+
+          states:
+            previous.states.map(
+              (state) =>
+                state.id ===
+                dragging.stateId
+                  ? {
+                      ...state,
+
+                      x: Math.max(
+                        0,
+                        x
+                      ),
+
+                      y: Math.max(
+                        0,
+                        y
+                      ),
+                    }
+                  : state
+            ),
+        })
+      );
     };
 
-    const handleMouseUp = () => {
-      setDragging(null);
-    };
+
+    const handleMouseUp =
+      () => {
+        setDragging(null);
+      };
+
 
     window.addEventListener(
       "mousemove",
@@ -513,7 +896,9 @@ function App() {
       handleMouseUp
     );
 
+
     return () => {
+
       window.removeEventListener(
         "mousemove",
         handleMouseMove
@@ -524,98 +909,172 @@ function App() {
         handleMouseUp
       );
     };
-  }, [dragging]);
 
-  /*
-   * --------------------------------
-   * SAVE
-   * --------------------------------
-   */
+  }, [
+    dragging,
+    viewport,
+  ]);
+
+
+  /* =======================================================
+     SAVE
+     ======================================================= */
 
   const handleSave = () => {
 
-  const name =
-    window.prompt(
-      "Enter automaton name:",
-      automaton.name ||
-        "My Automaton"
-    );
+    const name =
+      window.prompt(
+        "Enter automaton name:",
+        automaton.name ||
+          "My Automaton"
+      );
 
-  if (
-    name === null ||
-    name.trim() === ""
-  ) {
-    return;
-  }
 
-  const project =
+    if (
+      name === null ||
+      name.trim() === ""
+    ) {
+      return;
+    }
+
+
     saveAutomaton(
       {
         ...automaton,
-        name: name.trim(),
+        name:
+          name.trim(),
       },
       name.trim()
     );
 
-  setSavedProjectId(
-    project.id
-  );
 
-  setSavedAutomata(
-    getSavedAutomata()
-  );
+    setStatus(
+      `"${name.trim()}" saved`
+    );
+  };
 
-  setRecentAutomata(
-    getRecentAutomata()
-  );
 
-  setStatus(
-    `"${name.trim()}" saved`
-  );
-};
-
-  /*
-   * --------------------------------
-   * EXPORT JSON
-   * --------------------------------
-   */
+  /* =======================================================
+     EXPORT JSON
+     ======================================================= */
 
   const handleExport = () => {
-    const data = JSON.stringify(
-      automaton,
-      null,
-      2
-    );
 
-    const blob = new Blob(
-      [data],
-      {
-        type: "application/json",
-      }
-    );
+    const data =
+      JSON.stringify(
+        automaton,
+        null,
+        2
+      );
+
+
+    const blob =
+      new Blob(
+        [data],
+        {
+          type:
+            "application/json",
+        }
+      );
+
 
     const url =
-      URL.createObjectURL(blob);
+      URL.createObjectURL(
+        blob
+      );
+
 
     const link =
-      document.createElement("a");
+      document.createElement(
+        "a"
+      );
+
 
     link.href = url;
 
     link.download =
       "automatalab-automaton.json";
 
+
     link.click();
 
-    URL.revokeObjectURL(url);
 
-    setStatus("Automaton exported");
+    URL.revokeObjectURL(
+      url
+    );
+
+
+    setStatus(
+      "Automaton exported"
+    );
   };
+
+
+  /* =======================================================
+     ZOOM
+     ======================================================= */
+
+  const zoomIn = () => {
+
+    setViewport(
+      (previous) => ({
+        ...previous,
+
+        zoom: Math.min(
+          2.5,
+          Number(
+            (
+              previous.zoom +
+              0.1
+            ).toFixed(2)
+          )
+        ),
+      })
+    );
+  };
+
+
+  const zoomOut = () => {
+
+    setViewport(
+      (previous) => ({
+        ...previous,
+
+        zoom: Math.max(
+          0.4,
+          Number(
+            (
+              previous.zoom -
+              0.1
+            ).toFixed(2)
+          )
+        ),
+      })
+    );
+  };
+
+
+  const resetZoom = () => {
+
+    setViewport(
+      (previous) => ({
+        ...previous,
+        zoom: 1,
+      })
+    );
+  };
+
+
+  /* =======================================================
+     UI
+     ======================================================= */
 
   return (
     <div className="app">
 
-      {/* HEADER */}
+      {/* ===================================================
+          HEADER
+          =================================================== */}
 
       <header className="header">
 
@@ -626,7 +1085,9 @@ function App() {
           </div>
 
           <div>
-            <h1>AutomataLab</h1>
+            <h1>
+              AutomataLab
+            </h1>
 
             <span>
               Interactive Automata Simulator
@@ -635,10 +1096,13 @@ function App() {
 
         </div>
 
+
         <div className="header-actions">
 
           <select
-            value={automatonType}
+            value={
+              automatonType
+            }
             onChange={(event) =>
               handleTypeChange(
                 event.target.value
@@ -646,34 +1110,54 @@ function App() {
             }
             className="type-select"
           >
-            <option>DFA</option>
-            <option>NFA</option>
-            <option>ε-NFA</option>
+
+            <option value="DFA">
+              DFA
+            </option>
+
+            <option value="NFA">
+              NFA
+            </option>
+
+            <option value="ε-NFA">
+              ε-NFA
+            </option>
+
           </select>
+
 
           <button
             className="icon-button"
             title="New"
-            onClick={handleNew}
+            onClick={
+              handleNew
+            }
           >
             <FilePlus size={18} />
           </button>
 
+
           <button
             className="icon-button"
             title="Save"
-            onClick={handleSave}
+            onClick={
+              handleSave
+            }
           >
             <Save size={18} />
           </button>
 
+
           <button
             className="icon-button"
             title="Export JSON"
-            onClick={handleExport}
+            onClick={
+              handleExport
+            }
           >
             <Download size={18} />
           </button>
+
 
           <button
             className="icon-button"
@@ -687,11 +1171,16 @@ function App() {
       </header>
 
 
-      {/* WORKSPACE */}
+      {/* ===================================================
+          WORKSPACE
+          =================================================== */}
 
       <main className="workspace">
 
-        {/* SIDEBAR */}
+
+        {/* =================================================
+            SIDEBAR
+            ================================================= */}
 
         <aside className="sidebar">
 
@@ -699,130 +1188,228 @@ function App() {
             TOOLBOX
           </div>
 
+
+          {/* SELECT */}
+
           <button
             className={`tool ${
-              activeTool === "select"
+              activeTool ===
+              "select"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
-              setActiveTool("select")
+              setActiveTool(
+                "select"
+              )
             }
           >
-            <MousePointer2 size={18} />
+
+            <MousePointer2
+              size={18}
+            />
+
             Select
+
           </button>
 
 
+          {/* ADD STATE */}
+
           <button
             className={`tool ${
-              activeTool === "add-state"
+              activeTool ===
+              "add-state"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
-              setActiveTool("add-state")
+              setActiveTool(
+                "add-state"
+              )
             }
           >
+
             <Plus size={18} />
+
             Add State
+
           </button>
 
 
+          {/* TRANSITION */}
+
           <button
             className={`tool ${
-              activeTool === "transition"
+              activeTool ===
+              "transition"
                 ? "active"
                 : ""
             }`}
-            onClick={() =>
-              setActiveTool("transition")
-            }
+            onClick={() => {
+
+              setActiveTool(
+                "transition"
+              );
+
+              setTransitionStart(
+                null
+              );
+
+              setStatus(
+                "Transition tool selected"
+              );
+            }}
           >
-            <ArrowRight size={18} />
+
+            <ArrowRight
+              size={18}
+            />
+
             Transition
+
           </button>
 
 
+          {/* START */}
+
           <button
             className={`tool ${
-              activeTool === "start"
+              activeTool ===
+              "start"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
-              setActiveTool("start")
+              setActiveTool(
+                "start"
+              )
             }
           >
+
             <Circle size={18} />
+
             Set Start
+
           </button>
 
 
+          {/* FINAL */}
+
           <button
             className={`tool ${
-              activeTool === "final"
+              activeTool ===
+              "final"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
-              setActiveTool("final")
+              setActiveTool(
+                "final"
+              )
             }
           >
+
             <Circle size={18} />
+
             Set Final
+
           </button>
 
+
+          {/* DELETE */}
 
           <button
             className={`tool danger ${
-              activeTool === "delete"
+              activeTool ===
+              "delete"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
-              setActiveTool("delete")
+              setActiveTool(
+                "delete"
+              )
             }
           >
+
             <Trash2 size={18} />
+
             Delete
+
           </button>
 
 
+          {/* AUTOMATON INFO */}
+
           <div className="sidebar-section">
 
-            <span>AUTOMATON</span>
+            <span>
+              AUTOMATON
+            </span>
+
 
             <div className="info-row">
-              <span>Type</span>
+
+              <span>
+                Type
+              </span>
 
               <strong>
                 {automaton.type}
               </strong>
+
             </div>
 
+
             <div className="info-row">
-              <span>States</span>
+
+              <span>
+                States
+              </span>
 
               <strong>
-                {automaton.states.length}
+                {
+                  automaton
+                    .states
+                    .length
+                }
               </strong>
+
             </div>
 
+
             <div className="info-row">
-              <span>Transitions</span>
+
+              <span>
+                Transitions
+              </span>
 
               <strong>
-                {automaton.transitions.length}
+                {
+                  automaton
+                    .transitions
+                    .length
+                }
               </strong>
+
             </div>
 
+
             <div className="info-row">
-              <span>Final States</span>
+
+              <span>
+                Final States
+              </span>
 
               <strong>
-                {automaton.finalStates.length}
+                {
+                  automaton
+                    .finalStates
+                    .length
+                }
               </strong>
+
             </div>
 
           </div>
@@ -830,49 +1417,101 @@ function App() {
         </aside>
 
 
-        {/* CANVAS */}
+        {/* =================================================
+            CANVAS AREA
+            ================================================= */}
 
         <section className="canvas-area">
+
 
           <div className="canvas-toolbar">
 
             <div>
+
               <strong>
-                {automaton.type} Editor
+                {
+                  automaton.type
+                } Editor
               </strong>
 
               <span>
                 {" "}· Build your automaton
               </span>
+
             </div>
 
+
             <div className="canvas-status">
+
               ● {status}
+
             </div>
 
           </div>
 
 
           <Canvas
-            states={automaton.states}
-            transitions={automaton.transitions}
-            activeTool={activeTool}
+            states={
+              automaton.states
+            }
+
+            transitions={
+              automaton.transitions
+            }
+
+            activeTool={
+              activeTool
+            }
+
+            transitionStart={
+              transitionStart
+            }
+
+            viewport={
+              viewport
+            }
+
+            setViewport={
+              setViewport
+            }
+
             onCanvasClick={
               handleCanvasClick
             }
+
             onStateMouseDown={
               handleStateMouseDown
             }
+
             onStateClick={
               handleStateClick
             }
+
             onDeleteTransition={
               handleDeleteTransition
+            }
+
+            dragMovedRef={
+              dragMovedRef
+            }
+
+            zoomIn={
+              zoomIn
+            }
+
+            zoomOut={
+              zoomOut
+            }
+
+            resetZoom={
+              resetZoom
             }
           />
 
 
-          {/* SIMULATION BAR */}
+          {/* =================================================
+              SIMULATION BAR
+              ================================================= */}
 
           <div className="simulation-bar">
 
@@ -896,24 +1535,51 @@ function App() {
             </div>
 
 
-            <button className="run-button">
+            <button
+              className="run-button"
+              onClick={() =>
+                setStatus(
+                  "Simulation engine will be connected next"
+                )
+              }
+            >
+
               <Play size={18} />
+
               Run
-            </button>
 
-
-            <button className="secondary-button">
-              <Play size={17} />
-              Step
             </button>
 
 
             <button
               className="secondary-button"
-              onClick={handleReset}
+              onClick={() =>
+                setStatus(
+                  "Step simulation will be connected next"
+                )
+              }
             >
-              <RotateCcw size={17} />
+
+              <Play size={17} />
+
+              Step
+
+            </button>
+
+
+            <button
+              className="secondary-button"
+              onClick={
+                handleReset
+              }
+            >
+
+              <RotateCcw
+                size={17}
+              />
+
               Reset
+
             </button>
 
           </div>
@@ -923,17 +1589,25 @@ function App() {
       </main>
 
 
-      {/* FOOTER */}
+      {/* ===================================================
+          FOOTER
+          =================================================== */}
 
       <footer className="status-bar">
 
         <div>
+
           Status:
 
           <span className="status-ready">
-            {" "}{status}
+
+            {" "}
+            {status}
+
           </span>
+
         </div>
+
 
         <div>
           AutomataLab v1.0
@@ -944,5 +1618,6 @@ function App() {
     </div>
   );
 }
+
 
 export default App;

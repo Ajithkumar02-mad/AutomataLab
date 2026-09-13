@@ -16,18 +16,25 @@ export const createInitialAutomaton = () => ({
   finalStates: [],
 });
 
+
 export const createState = (
   id,
   x,
   y
 ) => ({
   id,
+
   name: id,
+
   x,
+
   y,
+
   isStart: false,
+
   isFinal: false,
 });
+
 
 export const createTransition = (
   from,
