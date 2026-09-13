@@ -13,10 +13,12 @@ import {
   Trash2,
   Zap,
   FilePlus,
+  Sparkles,
 } from "lucide-react";
 
 import Canvas from "./components/Canvas";
 import TransitionModal from "./components/TransitionModal";
+import AutomataAssistant from "./components/AutomataAssistant";
 
 import {
   createInitialAutomaton,
@@ -178,6 +180,12 @@ function App() {
     from: null,
     to: null,
   });
+
+      const [assistantOpen, setAssistantOpen] =
+        useState(false);
+
+      const [assistantExplanation, setAssistantExplanation] =
+        useState(null);
 
 
   // =======================================================
@@ -1644,6 +1652,43 @@ function App() {
     );
   };
 
+  // =======================================================
+// AUTOMATA ASSISTANT GENERATION
+// =======================================================
+
+const handleAssistantGenerate = ({
+  question,
+  parsed,
+  automaton: generatedAutomaton,
+}) => {
+  setAutomaton({
+    ...generatedAutomaton,
+    id: null,
+    name: generatedAutomaton.name,
+  });
+
+  setAutomatonType("DFA");
+
+  setInput("");
+
+  setTransitionStart(null);
+
+  setViewport({
+    x: 0,
+    y: 0,
+    zoom: 1,
+  });
+
+  setAssistantExplanation({
+    question,
+    parsed,
+    automaton: generatedAutomaton,
+  });
+
+  setAssistantOpen(false);
+
+  setStatus("DFA generated successfully");
+};
 
   // =======================================================
   // UI
@@ -1742,6 +1787,15 @@ function App() {
             <Download size={18} />
           </button>
 
+          <button
+            className="icon-button ask-button"
+            title="Ask Automata"
+            onClick={() =>
+              setAssistantOpen(true)
+            }
+          >
+            <Sparkles size={18} />
+          </button>
 
           <button
             className="icon-button"
@@ -2264,6 +2318,19 @@ function App() {
         }
 
       />
+
+     
+
+      {assistantOpen && (
+        <AutomataAssistant
+          onGenerate={
+            handleAssistantGenerate
+          }
+          onClose={() =>
+            setAssistantOpen(false)
+          }
+        />
+      )}
 
 
       {/* =================================================
