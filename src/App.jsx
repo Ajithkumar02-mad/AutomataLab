@@ -35,6 +35,11 @@ import {
   validateDFAForSimulation,
 } from "./algorithms/dfaSimulator";
 
+import {
+  simulateNFA,
+  validateNFAForSimulation,
+} from "./algorithms/nfaSimulator";
+
 import "./App.css";
 
 
@@ -1038,36 +1043,25 @@ function App() {
 
 
   // =======================================================
-  // RUN SIMULATION
-  // =======================================================
+// RUN SIMULATION
+// =======================================================
 
-  const handleRunSimulation = () => {
+const handleRunSimulation = () => {
+  clearSimulation();
 
-    if (
-      automatonType !==
-      "DFA"
-    ) {
+  // =====================================================
+  // DFA
+  // =====================================================
 
-      setStatus(
-        "Simulation currently supports DFA only"
-      );
-
-      return;
-    }
-
-
-    // Validate
+  if (automatonType === "DFA") {
     const validationErrors =
       validateDFAForSimulation(
         automaton
       );
 
-
     if (
-      validationErrors.length >
-      0
+      validationErrors.length > 0
     ) {
-
       setSimulation({
         running: false,
         completed: true,
@@ -1075,14 +1069,11 @@ function App() {
         result: "error",
 
         error: {
-          type:
-            "INVALID_AUTOMATON",
-
+          type: "INVALID_AUTOMATON",
           message:
             validationErrors[0],
-
           explanation:
-            "The automaton must be valid before simulation can start.",
+            "The DFA must be valid before simulation can start.",
         },
 
         currentState: null,
@@ -1096,24 +1087,19 @@ function App() {
       return;
     }
 
-
-    // Simulate
     const result =
       simulateDFA(
         automaton,
         input
       );
 
-
     const steps =
       result.steps || [];
-
 
     const lastStep =
       steps.length > 0
         ? steps[steps.length - 1]
         : null;
-
 
     const currentState =
       result.stoppedAt?.state ||
@@ -1121,26 +1107,13 @@ function App() {
       lastStep?.nextState ||
       automaton.startState;
 
-
-    const activeTransitionId =
-      result.error
-        ? null
-        : lastStep?.transitionId ||
-          null;
-
-
     let error = null;
 
-
-    // -----------------------------------------------
-    // MISSING TRANSITION
-    // -----------------------------------------------
-
+    // Missing transition
     if (
       result.error &&
       result.stoppedAt
     ) {
-
       error = {
         type:
           "MISSING_TRANSITION",
@@ -1152,26 +1125,18 @@ function App() {
           result.stoppedAt.symbol,
 
         position:
-          result.stoppedAt.position +
-          1,
+          result.stoppedAt.position + 1,
 
         message:
           result.error,
 
         explanation:
-          `There is no transition from ${result.stoppedAt.state} for the input symbol "${result.stoppedAt.symbol}". The DFA cannot continue processing the remaining input.`,
+          `There is no transition from ${result.stoppedAt.state} for input symbol "${result.stoppedAt.symbol}". The DFA cannot continue processing the remaining input.`,
       };
     }
 
-
-    // -----------------------------------------------
-    // OTHER ERROR
-    // -----------------------------------------------
-
-    else if (
-      result.error
-    ) {
-
+    // General error
+    else if (result.error) {
       error = {
         type:
           "SIMULATION_ERROR",
@@ -1180,20 +1145,15 @@ function App() {
           result.error,
 
         explanation:
-          "The simulation could not complete.",
+          "The DFA simulation could not complete.",
       };
     }
 
-
-    // -----------------------------------------------
-    // NON-FINAL STATE
-    // -----------------------------------------------
-
+    // Non-final state
     else if (
       result.success &&
       !result.accepted
     ) {
-
       error = {
         type:
           "NON_FINAL_STATE",
@@ -1205,10 +1165,9 @@ function App() {
           `Input was completely processed, but ${result.currentState} is not a final state.`,
 
         explanation:
-          "A DFA accepts a string only when the complete input has been consumed and the automaton ends in a final state.",
+          "A DFA accepts a string only when the complete input is consumed and the automaton ends in a final state.",
       };
     }
-
 
     setSimulation({
       running: false,
@@ -1232,28 +1191,215 @@ function App() {
 
       currentState,
 
-      activeTransitionId,
+      activeTransitionId:
+        result.error
+          ? null
+          : lastStep?.transitionId ||
+            null,
     });
 
-
-    if (
-      result.accepted
-    ) {
-
+    if (result.accepted) {
       setStatus(
         `✓ Input accepted at ${result.currentState}`
       );
-
     } else {
-
       setStatus(
         `✕ Input rejected at ${
-          currentState ||
-          "undefined"
+          currentState || "undefined"
         }`
       );
     }
-  };
+
+    return;
+  }
+
+  // =====================================================
+  // NFA
+  // =====================================================
+
+  if (automatonType === "NFA") {
+    const validationErrors =
+      validateNFAForSimulation(
+        automaton
+      );
+
+    if (
+      validationErrors.length > 0
+    ) {
+      setSimulation({
+        running: false,
+        completed: true,
+        stepIndex: 0,
+        result: "error",
+
+        error: {
+          type:
+            "INVALID_AUTOMATON",
+
+          message:
+            validationErrors[0],
+
+          explanation:
+            "The NFA must be valid before simulation can start.",
+        },
+
+        currentState: null,
+        activeTransitionId: null,
+      });
+
+      setStatus(
+        "Simulation failed: invalid NFA"
+      );
+
+      return;
+    }
+
+    const result =
+      simulateNFA(
+        automaton,
+        input
+      );
+
+    const steps =
+      result.steps || [];
+
+    const currentStates =
+  result.stoppedAt?.states ||
+  result.currentStates ||
+  [automaton.startState];
+
+    const displayState =
+      Array.isArray(
+        currentStates
+      )
+        ? currentStates.join(", ")
+        : String(currentStates);
+
+    let error = null;
+
+    // -----------------------------------------------------
+    // NO POSSIBLE TRANSITION
+    // -----------------------------------------------------
+
+    if (
+      result.error &&
+      result.stoppedAt
+    ) {
+      error = {
+        type:
+          "MISSING_TRANSITION",
+
+        state:
+          result.stoppedAt.states,
+
+        symbol:
+          result.stoppedAt.symbol,
+
+        position:
+          result.stoppedAt.position + 1,
+
+        message:
+          result.error,
+
+        explanation:
+          `None of the current NFA states has a transition for "${result.stoppedAt.symbol}" at input position ${
+            result.stoppedAt.position + 1
+          }. Therefore every possible computation path has stopped.`,
+      };
+    }
+
+    // -----------------------------------------------------
+    // GENERAL ERROR
+    // -----------------------------------------------------
+
+    else if (result.error) {
+      error = {
+        type:
+          "SIMULATION_ERROR",
+
+        message:
+          result.error,
+
+        explanation:
+          "The NFA simulation could not complete.",
+      };
+    }
+
+    // -----------------------------------------------------
+    // COMPLETED BUT NOT FINAL
+    // -----------------------------------------------------
+
+    else if (
+      result.success &&
+      !result.accepted
+    ) {
+      error = {
+        type:
+          "NON_FINAL_STATE",
+
+        state:
+          currentStates,
+
+        message:
+          `Input was completely processed, but none of the possible states (${displayState}) is final.`,
+
+        explanation:
+          "An NFA accepts if at least one possible computation path finishes in a final state. Here, none of the possible states is final.",
+      };
+    }
+
+    setSimulation({
+      running: false,
+
+      completed: true,
+
+      stepIndex:
+        Math.max(
+          0,
+          steps.length - 1
+        ),
+
+      result:
+        result.error
+          ? "rejected"
+          : result.accepted
+          ? "accepted"
+          : "rejected",
+
+      error,
+
+      // Current UI expects one value.
+      // For NFA we display all possible states.
+      currentState:
+        displayState,
+
+      activeTransitionId:
+        null,
+    });
+
+    if (result.accepted) {
+      setStatus(
+        `✓ NFA input accepted: ${displayState}`
+      );
+    } else {
+      setStatus(
+        `✕ NFA input rejected: ${displayState}`
+      );
+    }
+
+    return;
+  }
+
+  // =====================================================
+  // UNKNOWN TYPE
+  // =====================================================
+
+  setStatus(
+    `Simulation not supported for ${automatonType}`
+  );
+};
+
+ 
 
 
   // =======================================================
