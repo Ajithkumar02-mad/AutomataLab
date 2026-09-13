@@ -19,6 +19,8 @@ import {
 import Canvas from "./components/Canvas";
 import TransitionModal from "./components/TransitionModal";
 import AutomataAssistant from "./components/AutomataAssistant";
+import { parseNFAQuestion } from "./parsers/nfaQuestionParser";
+import { generateNFA } from "./algorithms/nfaGenerator";
 
 import {
   createInitialAutomaton,
@@ -1807,23 +1809,42 @@ const handleAssistantGenerate = ({
   parsed,
   automaton: generatedAutomaton,
 }) => {
+  if (!generatedAutomaton) {
+    setStatus("Failed to generate automaton");
+    return;
+  }
+
   setAutomaton({
     ...generatedAutomaton,
     id: null,
-    name: generatedAutomaton.name,
+    name:
+      generatedAutomaton.name ||
+      "Generated Automaton",
   });
 
-  setAutomatonType("DFA");
+  setAutomatonType(
+    generatedAutomaton.type ||
+      parsed?.type ||
+      "DFA"
+  );
 
   setInput("");
 
   setTransitionStart(null);
+
+  setTransitionModal({
+    open: false,
+    from: null,
+    to: null,
+  });
 
   setViewport({
     x: 0,
     y: 0,
     zoom: 1,
   });
+
+  clearSimulation();
 
   setAssistantExplanation({
     question,
@@ -1833,9 +1854,10 @@ const handleAssistantGenerate = ({
 
   setAssistantOpen(false);
 
-  setStatus("DFA generated successfully");
+  setStatus(
+    `${generatedAutomaton.type || "Automaton"} generated successfully`
+  );
 };
-
   // =======================================================
   // UI
   // =======================================================

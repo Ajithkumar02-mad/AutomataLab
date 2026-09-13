@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Bot, Sparkles, X } from "lucide-react";
 
+import { parseNFAQuestion } from "../parsers/nfaQuestionParser";
+import { generateNFA } from "../algorithms/nfaGenerator";
+
 import { parseAutomataQuestion } from "../parsers/automataQuestionParser";
 import { generateDFA } from "../algorithms/dfaGenerator";
 
@@ -18,29 +21,87 @@ const AutomataAssistant = ({
     useState(false);
 
   const examples = [
-    "Construct a DFA accepting strings ending with 01",
-    "DFA accepting strings containing 101",
-    "DFA accepting strings starting with 1",
-    "DFA accepting strings with even number of 0s",
-  ];
+  "Construct a DFA accepting strings ending with 01",
+  "Construct an NFA accepting strings ending with 01",
+  "Construct an NFA accepting strings containing 101",
+  "Construct a DFA accepting strings starting with 1",
+  "Construct an NFA accepting strings with at least one 1",
+];
 
   const handleGenerate = () => {
-    setError("");
+  setError("");
 
-    if (!question.trim()) {
-      setError(
-        "Please enter an automata question."
-      );
-      return;
-    }
+  if (!question.trim()) {
+    setError("Please enter an automata question.");
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    setTimeout(() => {
+  setTimeout(() => {
+    try {
+      const text = question.toLowerCase();
+
+      // =====================================================
+      // DETECT AUTOMATON TYPE
+      // =====================================================
+
+      const isEpsilonNFA =
+        text.includes("ε-nfa") ||
+        text.includes("epsilon nfa") ||
+        text.includes("epsilon-nfa") ||
+        text.includes("e-nfa");
+
+      const isNFA =
+        text.includes("nfa") ||
+        text.includes("non deterministic") ||
+        text.includes("nondeterministic");
+
+      // =====================================================
+      // NFA / ε-NFA
+      // =====================================================
+
+      if (isNFA || isEpsilonNFA) {
+        const parsed = parseNFAQuestion(question);
+
+        if (!parsed.success) {
+          setError(parsed.error);
+          setLoading(false);
+          return;
+        }
+
+        const generated = generateNFA({
+          ...parsed,
+          type: isEpsilonNFA ? "ε-NFA" : "NFA",
+        });
+
+        if (!generated) {
+          setError("Unable to generate NFA.");
+          setLoading(false);
+          return;
+        }
+
+        onGenerate({
+          question,
+          parsed,
+          automaton: {
+            ...generated,
+            type: isEpsilonNFA
+              ? "ε-NFA"
+              : "NFA",
+          },
+        });
+
+        setLoading(false);
+        return;
+      }
+
+      // =====================================================
+      // DFA
+      // =====================================================
+
       const parsed =
-        parseAutomataQuestion(
-          question
-        );
+        parseAutomataQuestion(question);
 
       if (!parsed.success) {
         setError(parsed.error);
@@ -60,13 +121,25 @@ const AutomataAssistant = ({
       onGenerate({
         question,
         parsed,
-        automaton:
-          generated.automaton,
+        automaton: generated.automaton,
       });
 
       setLoading(false);
-    }, 250);
-  };
+
+    } catch (error) {
+      console.error(
+        "Automata generation error:",
+        error
+      );
+
+      setError(
+        "Something went wrong while generating the automaton."
+      );
+
+      setLoading(false);
+    }
+  }, 250);
+};
 
   return (
     <div className="assistant-overlay">
@@ -134,7 +207,7 @@ const AutomataAssistant = ({
 
             {loading
               ? "Generating..."
-              : "Generate DFA"}
+              : "Generate Automaton"}
           </button>
 
           <div className="assistant-examples">
